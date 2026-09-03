@@ -94,7 +94,7 @@ jobs:
         # whatever the default branch happened to hold at the moment of the deployment, so
         # merging anything into that gem changed every application's next deploy with no
         # release, review or rollback in between. -t takes a git tag.
-        run: sudo gem specific_install -l https://github.com/BuddyandSelly/kubernetes_helper -t v1.25.0
+        run: sudo gem specific_install -l https://github.com/BuddyandSelly/kubernetes_helper -t v1.26.0
 
       # Staging deployment
 
