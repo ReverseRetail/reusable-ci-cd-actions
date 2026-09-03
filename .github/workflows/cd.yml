@@ -68,7 +68,7 @@ jobs:
     steps:
       # common steps
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.DEPLOY_BRANCH }}
 
