@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # github-actions only: this repository holds workflows and documentation, with no
+  # Gemfile or package.json for bundler or npm to look at.
+  #
+  # Worth reviewing these more carefully than in an application repository. The
+  # workflows here run inside every application's deployment, so an action bumped in
+  # this pull request changes how all of them build and deploy on their next run. The
+  # grouping keeps that as one reviewable change per week instead of a handful of
+  # separate ones, since dependabot bumps every occurrence of an action together
+  # anyway.
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - '*'

@@ -61,7 +61,7 @@ jobs:
 
     steps:
       # common steps
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Copy env vars file
         run: cp .env-example .env
         if: inputs.copy_env
@@ -69,7 +69,7 @@ jobs:
         run: cp config/database-example.yml config/database.yml
         if: inputs.copy_db_yml
       - name: Cancel previous Workflow Actions
-        uses: styfle/cancel-workflow-action@0.6.0
+        uses: styfle/cancel-workflow-action@0.12.0
         with:
           access_token: ${{ github.token }}
 
@@ -90,7 +90,7 @@ jobs:
         run: docker-compose pull
 
       # uses: satackey/action-docker-layer-caching@v0.0.11 (outdated for deprecations)
-      - uses: jpribyl/action-docker-layer-caching@v0.1.0
+      - uses: jpribyl/action-docker-layer-caching@v0.1.1
         continue-on-error: true # Ignore the failure of a step and avoid terminating the job.
         with:
           key: app-cache-${{ hashFiles('Dockerfile') }}
@@ -125,7 +125,7 @@ jobs:
         if: inputs.eslint_cmd != ''
 
       - name: Upload final coverage results
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v7
         with:
           name: final-coverage-report
           path: coverage
@@ -154,7 +154,7 @@ jobs:
         uses: mxschmitt/action-tmate@v3
         if: inputs.debug && always()
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: capybara-screenshots
           path: tmp/capybara

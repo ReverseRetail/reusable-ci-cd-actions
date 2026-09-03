@@ -1,8 +1,45 @@
+# The current deployment pipeline. This file used to hold an older one that installed
+# kubernetes_helper from rubygems, ran on ubuntu-latest, pushed images to GCR and took no
+# inputs; nothing referenced it any more, so it has been replaced with the contents of
+# cd_new.yml rather than left to rot as a second, divergent pipeline.
+#
+# Note for anything still pointing at the old file: this now takes seven required inputs
+# (APP_NAME, GAR_BETA_REGION, GAR_PROD_REGION, GCP_STAGING_PROJECT_ID, GCP_PROD_PROJECT_ID,
+# GAR_STAGING_REPO, GAR_PRODUCTION_REPO). A reusable workflow called without a required
+# input fails before it starts a single job, so a caller has to pass all seven.
+#
+# cd_new.yml is identical and kept only so its existing callers keep working. Move them
+# here and delete it.
 name: "Continuous Deployment"
 on:
   # Make workflow reusable
   workflow_call:
     inputs:
+      APP_NAME:
+        type: string
+        required: true
+      GAR_BETA_REGION:
+        type: string
+        required: true
+      GAR_PROD_REGION:
+        type: string
+        required: true
+      GCP_STAGING_PROJECT_ID:
+        type: string
+        required: true
+      GCP_PROD_PROJECT_ID:
+        type: string
+        required: true
+      GAR_STAGING_REPO:
+        type: string
+        required: true
+      GAR_PRODUCTION_REPO:
+        type: string
+        required: true
+      DOCKER_BUILD_TARGET:
+        type: string
+        required: false
+        default: 'production'
       debug:
         type: boolean
         required: false
@@ -19,7 +56,7 @@ on:
 
 jobs:
   deployment:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
     env:
@@ -27,28 +64,30 @@ jobs:
       STAGING_DEPLOY: ${{ github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_env != 'production') }}
       STAGING_DEPLOY_ENV: ${{github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_env || 'beta'}}
       DEPLOY_BRANCH: ${{github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref}}
+
     steps:
       # common steps
-      - uses: actions/checkout@v2
+
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.DEPLOY_BRANCH }}
-      - name: Cancel previous Workflow Actions
-        uses: styfle/cancel-workflow-action@0.9.1
+
+      - name: Cancel Previous Workflow Actions
+        uses: styfle/cancel-workflow-action@0.12.0
         with:
           access_token: ${{ github.token }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0
+        uses: google-github-actions/setup-gcloud@v2
         if: inputs.service == 'gcloud'
 
-      # uses: satackey/action-docker-layer-caching@v0.0.11 (outdated for deprecations)
-      - uses: jpribyl/action-docker-layer-caching@v0.1.0
+      - uses: jpribyl/action-docker-layer-caching@v0.1.1
         continue-on-error: true
         with:
           key: CD-docker-cache-${{ hashFiles('Dockerfile') }}
           restore-keys: app-cache-
 
-      - name: Calc current version
+      - name: Calculate current version
         run: |
           git_hash=$(git rev-parse --verify HEAD || :)
           default_version=${git_hash:-$(date +%s)}
@@ -56,14 +95,53 @@ jobs:
           deploy_version=${deploy_version:-$default_version}
           echo "DEPLOY_VERSION=$deploy_version" >> $GITHUB_ENV
 
-      - run: "sudo gem install kubernetes_helper"
-      - name: Staging deployment
-        env: # Env variable saved in github that contains gcloud credential (json format)
+      - name: Install Specific Install gem
+        run: sudo gem install specific_install
+
+      - name: Install Kubernetes Helper with Specific Install
+        # Pinned, and named under the organisation's current name. Unpinned, this installed
+        # whatever the default branch happened to hold at the moment of the deployment, so
+        # merging anything into that gem changed every application's next deploy with no
+        # release, review or rollback in between. -t takes a git tag.
+        run: sudo gem specific_install -l https://github.com/BuddyandSelly/kubernetes_helper -t v1.25.0
+
+      # Staging deployment
+
+      - name: Push Docker Image to GAR (Staging)
+        uses: a94763075/push-to-gar-github-action@v0.3.3
+        with:
+          gcloud_service_key: ${{ secrets.BETA_GOOGLE_AUTH }}
+          project_id: ${{ inputs.GCP_STAGING_PROJECT_ID }}
+          registry: ${{ inputs.GAR_BETA_REGION }}
+          repository: ${{ inputs.GAR_STAGING_REPO }}
+          image_name: ${{ inputs.APP_NAME }}-staging
+          image_tags: ${{ github.sha }}
+          dockerfile: './Dockerfile'
+          target: ${{ inputs.DOCKER_BUILD_TARGET }}
+        if: ${{ env.STAGING_DEPLOY == 'true' }}
+
+      - name: Staging Deployment
+        env:
           KB_AUTH_TOKEN: ${{ secrets.BETA_GOOGLE_AUTH }}
           DEPLOY_ENV: ${{ env.STAGING_DEPLOY_ENV }}
           DEPLOY_VERSION: ${{ env.DEPLOY_VERSION }}
         run: kubernetes_helper run_deployment 'cd.sh'
         if: ${{ env.STAGING_DEPLOY == 'true' }}
+
+      # Production deployment
+
+      - name: Push Docker Image to GAR (Production)
+        uses: a94763075/push-to-gar-github-action@v0.3.3
+        with:
+          gcloud_service_key: ${{ secrets.PROD_GOOGLE_AUTH }}
+          project_id: ${{ inputs.GCP_PROD_PROJECT_ID }}
+          registry: ${{ inputs.GAR_PROD_REGION }}
+          repository: ${{ inputs.GAR_PRODUCTION_REPO }}
+          image_name: ${{ inputs.APP_NAME }}-production
+          image_tags: ${{ github.sha }}
+          dockerfile: './Dockerfile'
+          target: ${{ inputs.DOCKER_BUILD_TARGET }}
+        if: ${{ env.PROD_DEPLOY == 'true' }}
 
       - name: Production deployment
         env:
