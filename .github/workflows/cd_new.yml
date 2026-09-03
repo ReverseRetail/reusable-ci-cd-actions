@@ -1,3 +1,6 @@
+# Kept for its existing callers only. cd.yml is identical and is the canonical copy;
+# point callers there and delete this file. Any change made here has to be made there too
+# until that happens.
 name: "Continuous Deployment"
 on:
   # Make workflow reusable
@@ -87,7 +90,11 @@ jobs:
         run: sudo gem install specific_install
 
       - name: Install Kubernetes Helper with Specific Install
-        run: sudo gem specific_install -l https://github.com/ReverseRetail/kubernetes_helper
+        # Pinned, and named under the organisation's current name. Unpinned, this installed
+        # whatever the default branch happened to hold at the moment of the deployment, so
+        # merging anything into that gem changed every application's next deploy with no
+        # release, review or rollback in between. -t takes a git tag.
+        run: sudo gem specific_install -l https://github.com/BuddyandSelly/kubernetes_helper -t v1.25.0
 
       # Staging deployment
 
